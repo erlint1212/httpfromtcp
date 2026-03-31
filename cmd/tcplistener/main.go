@@ -3,28 +3,18 @@ package main
 import (
 	"fmt"
 	"strings"
-	"os"
 	"log"
 	"io"
 	"net"
 )
 
-const inputFilePath = "messages.txt"
 const network = "tcp"
 const port = ":42069"
 
-func handleConnection(conn net.Conn) <-chan string {
-	defer conn.Close()
-	log.Printf("Accepted new connection from %s\n", conn.RemoteAddr())
+func getLinesChannel(conn net.Conn) <-chan string {
 
 	messages := make(chan string)
 	
-	go getLinesChannel(messages, conn)
-
-	return messages
-}
-
-func getLinesChannel(messages <-chan string, conn net.Conn) {
 	buffer := make([]byte, 8)
 	currentLine := ""
 
@@ -45,8 +35,8 @@ func getLinesChannel(messages <-chan string, conn net.Conn) {
 			} else {
 				for i:=0;i < len(parts) - 1;i++ {
 					currentLine += parts[i]
-					messages <- currentLine
 				}
+				messages <- currentLine
 				currentLine = "" + parts[len(parts)-1]
 			}
 		}
@@ -54,16 +44,14 @@ func getLinesChannel(messages <-chan string, conn net.Conn) {
 			messages <- currentLine
 		}
 		close(messages)
+		conn.Close()
+		fmt.Println("Connection closed")
 	} ()
+
+	return messages
 }
 
 func main() {
-	file, err := os.Open(inputFilePath)
-	if err != nil {
-		log.Fatalf("ERROR: Couldn't open file: %v\n", err)
-	}
-	defer file.Close()
-
 	listener, err := net.Listen(network, port)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to connect \"%s\" to port \"%s\": %v\n", network, port, err))
@@ -76,9 +64,10 @@ func main() {
 			log.Printf("ERROR: Failed accepting connection: %v\n", err)
 			continue
 		}
+		fmt.Printf("Accepted new connection from %s\n", conn.RemoteAddr())
 
-		for msg := range handleConnection(conn) {
-			fmt.Printf("read: %s\n", msg)
+		for msg := range getLinesChannel(conn) {
+			fmt.Println(msg)
 		}
 	}
 
