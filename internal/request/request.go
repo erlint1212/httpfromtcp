@@ -9,6 +9,7 @@ import (
 
 type Request struct {
 	RequestLine RequestLine
+	state       RequestState
 }
 
 type RequestLine struct {
@@ -17,39 +18,102 @@ type RequestLine struct {
 	Method        string
 }
 
+type RequestState int
+
+const (
+	initialized RequestState = iota
+	done
+)
+
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	bit_read, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
+	const bufferSize = 8
+	readToIndex := 0
+	newRequest := Request{}
+	newRequest.state = initialized
+
+	buffer := make([]byte, bufferSize, bufferSize)
+
+	for {
+		if newRequest.state == done {
+			break
+		}
+		if readToIndex == len(buffer) {
+			bufferNew := make([]byte, len(buffer)*2, cap(buffer)*2)
+			copy(bufferNew, buffer)
+			buffer = bufferNew
+		}
+		numRead, err := reader.Read(buffer[readToIndex:])
+		if err == io.EOF {
+			newRequest.state = done
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		readToIndex += numRead
+
+		numParsed, err := newRequest.parse(buffer[:readToIndex])
+		if err != nil {
+			return nil, err
+		}
+
+		copy(buffer, buffer[numParsed:])
+
+		readToIndex -= numParsed
 	}
 
-	parsed_read, err := parseRequestLine(bit_read)
-	if err != nil {
-		return nil, err
-	}
-
-	parsed_request := RequestLine{parsed_read[2], parsed_read[1], parsed_read[0]}
-	new_request := Request{parsed_request}
-
-	return &new_request, nil
+	return &newRequest, nil
 }
 
-func parseRequestLine(bit_read []byte) ([]string, error) {
-	read := string(bit_read)
+func parseRequestLine(data []byte) ([]string, int, error) {
+	read := string(data)
 	lines := strings.Split(read, "\r\n")
-	request_line := lines[0]
-	request_line_split := strings.Split(request_line, " ")
-	for _, rune := range(request_line_split[0]) {
+	if len(lines) == 1 {
+		return nil, 0, nil
+	}
+	requestLine := lines[0]
+	requestLineSplit := strings.Split(requestLine, " ")
+	for _, rune := range requestLineSplit[0] {
 		if !unicode.IsUpper(rune) {
-			return nil, fmt.Errorf("method is not pure capital alphabetic character: %s", request_line_split[0])
+			return nil, 0, fmt.Errorf("method is not pure capital alphabetic character: %s", requestLineSplit[0])
 		}
 	}
-	request_line_split[2] = strings.Split(request_line_split[2], "/")[1]
-	if request_line_split[2] != "1.1" {
-		return nil, fmt.Errorf("unsuported HTTP version, expected 1.1, got: %s", request_line_split[2])
+	requestLineSplit[2] = strings.Split(requestLineSplit[2], "/")[1]
+	if requestLineSplit[2] != "1.1" {
+		return nil, 0, fmt.Errorf("unsuported HTTP version, expected 1.1, got: %s", requestLineSplit[2])
 	}
 
-	return request_line_split, nil
+	return requestLineSplit, len(lines[0]) + 2, nil // +2 for \r\n
 }
 
+func (r *Request) parse(data []byte) (int, error) {
+	switch r.state {
+	case initialized:
+		{
+			parsedRead, bytesConsumed, err := parseRequestLine(data)
+			if err != nil {
+				return 0, err
+			}
+			if bytesConsumed == 0 {
+				return 0, nil
+			}
 
+			parsedRequest := RequestLine{parsedRead[2], parsedRead[1], parsedRead[0]}
+
+			r.RequestLine = parsedRequest
+
+			r.state = done
+
+			return bytesConsumed, nil
+		}
+	case done:
+		{
+			return 0, fmt.Errorf("[ERROR] Trying to read data in  a done state")
+		}
+	default:
+		{
+			return 0, fmt.Errorf("[ERROR] Unkown state")
+		}
+	}
+}
