@@ -21,22 +21,19 @@ type RequestLine struct {
 type RequestState int
 
 const (
-	initialized RequestState = iota
-	done
+	requestStateInitialized RequestState = iota
+	requestStateDone
 )
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	const bufferSize = 8
 	readToIndex := 0
-	newRequest := Request{}
-	newRequest.state = initialized
+	newRequest := &Request{}
+	newRequest.state = requestStateInitialized
 
 	buffer := make([]byte, bufferSize, bufferSize)
 
-	for {
-		if newRequest.state == done {
-			break
-		}
+	for newRequest.state != requestStateDone {
 		if readToIndex == len(buffer) {
 			bufferNew := make([]byte, len(buffer)*2, cap(buffer)*2)
 			copy(bufferNew, buffer)
@@ -44,7 +41,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 		numRead, err := reader.Read(buffer[readToIndex:])
 		if err == io.EOF {
-			newRequest.state = done
+			newRequest.state = requestStateDone
 			break
 		}
 		if err != nil {
@@ -63,7 +60,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readToIndex -= numParsed
 	}
 
-	return &newRequest, nil
+	return newRequest, nil
 }
 
 func parseRequestLine(data []byte) ([]string, int, error) {
@@ -89,7 +86,7 @@ func parseRequestLine(data []byte) ([]string, int, error) {
 
 func (r *Request) parse(data []byte) (int, error) {
 	switch r.state {
-	case initialized:
+	case requestStateInitialized:
 		{
 			parsedRead, bytesConsumed, err := parseRequestLine(data)
 			if err != nil {
@@ -103,13 +100,13 @@ func (r *Request) parse(data []byte) (int, error) {
 
 			r.RequestLine = parsedRequest
 
-			r.state = done
+			r.state = requestStateDone
 
 			return bytesConsumed, nil
 		}
-	case done:
+	case requestStateDone:
 		{
-			return 0, fmt.Errorf("[ERROR] Trying to read data in  a done state")
+			return 0, fmt.Errorf("[ERROR] Trying to read data in  a requestStateDone state")
 		}
 	default:
 		{
