@@ -60,6 +60,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readToIndex -= numParsed
 	}
 
+	
+
 	return newRequest, nil
 }
 
