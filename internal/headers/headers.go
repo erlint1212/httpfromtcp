@@ -13,6 +13,30 @@ func NewHeaders() Headers {
 	return Headers{}
 }
 
+func IsValidToken(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+
+	for _, c := range s {
+		if isAlphaNum(byte(c)) || isSpecialTchar(byte(c)) {
+			continue
+		}
+		return false
+	}
+
+	return true
+}
+
+func isAlphaNum(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+}
+
+func isSpecialTchar(c byte) bool {
+	const specials = "!#$%&'*+-.^_`|~"
+	return strings.IndexByte(specials, c) >= 0
+}
+
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	dataString := string(data)
 
@@ -26,14 +50,23 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 
 	header := dataStringSplit[0]
-	headerKeyValue := strings.Split(header, ":")
-	if strings.Contains(headerKeyValue[0], " ") {
-		return 0, false, fmt.Errorf("invalid field-name: %s", headerKeyValue[0])
+	headerKeyValue := strings.SplitN(header, ":", 2)
+	if len(headerKeyValue) != 2 {
+		return 0, false, fmt.Errorf("invalid header line: %s", header)
 	}
-	headerValue := strings.Join(headerKeyValue[1:], ":")
+	headerKey := headerKeyValue[0]
+	if strings.Contains(headerKey, " ") {
+		return 0, false, fmt.Errorf("invalid field-name: %s", headerKey)
+	}
+	if !IsValidToken(headerKey) {
+		return 0, false, fmt.Errorf("invalid char in field-name: %s", headerKey)
+	}
+	headerKey = strings.ToLower(headerKey)
+	
+	headerValue := headerKeyValue[1]
 	headerValue = strings.TrimSpace(headerValue)
 
-	h[headerKeyValue[0]] = headerValue
+	h[headerKey] = headerValue
 
 	return len(dataStringSplit[0]) + len(CRLF), false, nil
 }
