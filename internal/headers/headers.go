@@ -44,12 +44,14 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	if len(dataStringSplit) == 1 {
 		return 0, false, nil
 	}
-	if dataStringSplit[0] == "" {
-		return len(CRLF), true, nil
-
-	}
 
 	header := dataStringSplit[0]
+	fmt.Println(header)
+
+	if header == "" {
+		return len(CRLF), true, nil
+	}
+
 	headerKeyValue := strings.SplitN(header, ":", 2)
 	if len(headerKeyValue) != 2 {
 		return 0, false, fmt.Errorf("invalid header line: %s", header)
@@ -66,7 +68,12 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	headerValue := headerKeyValue[1]
 	headerValue = strings.TrimSpace(headerValue)
 
-	h[headerKey] = headerValue
-
-	return len(dataStringSplit[0]) + len(CRLF), false, nil
+	_, ok := h[headerKey]
+	if !ok {
+		h[headerKey] = headerValue
+	} else {
+		h[headerKey] += ", " + headerValue
+	}
+	
+	return len(header) + len(CRLF), false, nil
 }
