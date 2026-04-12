@@ -8,29 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (h Headers) useParse(data []byte) (n int, done bool, err error) {
-
-	n = 0
-	done = false
-	err = nil
-
-	bytes_parsed := 0
-
-	for {
-		n, done, err = h.Parse(data)
-		if err != nil {
-			break
-		}
-		if done {
-			bytes_parsed += n
-			break
-		}
-		data = data[n:]
-		bytes_parsed += n
-	}
-
-	return bytes_parsed, done, err
-}
 
 func TestHeaderLineParse(t *testing.T) {
 	// Test: Valid single header
@@ -49,7 +26,7 @@ func TestHeaderLineParse(t *testing.T) {
 	s2 := []byte("Set-Person: prime-loves-zig\r\n")
 	s3 := []byte("Set-Person: tj-loves-ocaml\r\n\r\n")
 	data = slices.Concat(s1, s2, s3)
-	n, done, err = headers.useParse(data)
+	n, done, err = headers.UseParse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	assert.Equal(t, "lane-loves-go, prime-loves-zig, tj-loves-ocaml", headers["set-person"])

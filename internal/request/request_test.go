@@ -77,4 +77,53 @@ func TestRequestHeaderParse(t *testing.T) {
 	r, err = RequestFromReader(reader)
 	require.Error(t, err)
 
+	// Test: All data in one go
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost\r\nUser-Agent: x\r\n\r\n",
+		numBytesPerRead: 100,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	require.Equal(t, "localhost", r.Headers["host"])
+	assert.Equal(t, "x", r.Headers["user-agent"])
+
+	// Test: Empty Headers (just the request line + terminator, no headers)
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, 0, len(r.Headers))
+
+	// Test: Duplicate Headers (should combine with ", ")
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nSet-Person: Alice\r\nSet-Person: Bob\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "Alice, Bob", r.Headers["set-person"])
+
+	// Test: Case Insensitive Headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHOST: example.com\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "example.com", r.Headers["host"])
+
+	// Test: Missing End of Headers (no final \r\n, hits EOF)
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+
 }

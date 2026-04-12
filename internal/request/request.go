@@ -2,6 +2,7 @@ package request
 
 import (
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"io"
 	"strings"
 	"unicode"
@@ -10,6 +11,7 @@ import (
 type Request struct {
 	RequestLine RequestLine
 	state       RequestState
+	Headers     headers.Headers
 }
 
 type RequestLine struct {
@@ -23,6 +25,7 @@ type RequestState int
 const (
 	requestStateInitialized RequestState = iota
 	requestStateDone
+	requestStateParsingHeaders
 )
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
@@ -30,6 +33,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	readToIndex := 0
 	newRequest := &Request{}
 	newRequest.state = requestStateInitialized
+	newRequest.Headers = headers.NewHeaders()
 
 	buffer := make([]byte, bufferSize, bufferSize)
 
@@ -41,10 +45,10 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 		numRead, err := reader.Read(buffer[readToIndex:])
 		if err == io.EOF {
-			newRequest.state = requestStateDone
-			break
-		}
-		if err != nil {
+			if readToIndex == 0 {
+				return nil, fmt.Errorf("unexpected EOF")
+			}
+		} else if err != nil {
 			return nil, err
 		}
 
@@ -59,8 +63,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		readToIndex -= numParsed
 	}
-
-	
 
 	return newRequest, nil
 }
@@ -102,10 +104,24 @@ func (r *Request) parse(data []byte) (int, error) {
 
 			r.RequestLine = parsedRequest
 
-			r.state = requestStateDone
+			r.state = requestStateParsingHeaders
 
 			return bytesConsumed, nil
 		}
+	case requestStateParsingHeaders: {
+		bytesConsumed, done, err := r.Headers.UseParse(data)
+		if err != nil {
+			return 0, err
+		}
+
+		if !done {
+			return bytesConsumed, nil
+		}
+
+		r.state = requestStateDone
+
+		return bytesConsumed, nil
+	}
 	case requestStateDone:
 		{
 			return 0, fmt.Errorf("[ERROR] Trying to read data in  a requestStateDone state")

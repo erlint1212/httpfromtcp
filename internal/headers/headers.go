@@ -37,6 +37,33 @@ func isSpecialTchar(c byte) bool {
 	return strings.IndexByte(specials, c) >= 0
 }
 
+func (h Headers) UseParse(data []byte) (n int, done bool, err error) {
+
+	n = 0
+	done = false
+	err = nil
+
+	bytes_parsed := 0
+
+	for {
+		n, done, err = h.Parse(data)
+		if err != nil {
+			break
+		}
+		if done {
+			bytes_parsed += n
+			break
+		}
+		if n == 0 && !done {
+			break
+		}
+		data = data[n:]
+		bytes_parsed += n
+	}
+
+	return bytes_parsed, done, err
+}
+
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	dataString := string(data)
 
