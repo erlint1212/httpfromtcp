@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -12,6 +13,7 @@ type Request struct {
 	RequestLine RequestLine
 	state       RequestState
 	Headers     headers.Headers
+	Body        []byte
 }
 
 type RequestLine struct {
@@ -26,6 +28,7 @@ const (
 	requestStateInitialized RequestState = iota
 	requestStateDone
 	requestStateParsingHeaders
+	requestStateParsingBody
 )
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
@@ -34,6 +37,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	newRequest := &Request{}
 	newRequest.state = requestStateInitialized
 	newRequest.Headers = headers.NewHeaders()
+	newRequest.Body = []byte{}
 
 	buffer := make([]byte, bufferSize, bufferSize)
 
@@ -44,24 +48,27 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			buffer = bufferNew
 		}
 		numRead, err := reader.Read(buffer[readToIndex:])
-		if err == io.EOF {
-			if readToIndex == 0 {
-				return nil, fmt.Errorf("unexpected EOF")
-			}
-		} else if err != nil {
-			return nil, err
-		}
 
 		readToIndex += numRead
 
-		numParsed, err := newRequest.parse(buffer[:readToIndex])
-		if err != nil {
-			return nil, err
+		numParsed, parseErr := newRequest.parse(buffer[:readToIndex])
+		if parseErr != nil {
+			return nil, parseErr
 		}
 
 		copy(buffer, buffer[numParsed:])
 
 		readToIndex -= numParsed
+
+		if err != nil {
+			if err == io.EOF {
+				if newRequest.state == requestStateDone {
+					break
+				}
+				return nil, fmt.Errorf("incomplete request")
+			}
+			return nil, err
+		}
 	}
 
 	return newRequest, nil
@@ -119,9 +126,32 @@ func (r *Request) parse(data []byte) (int, error) {
 				return bytesConsumed, nil
 			}
 
-			r.state = requestStateDone
+			r.state = requestStateParsingBody
 
 			return bytesConsumed, nil
+		}
+	case requestStateParsingBody:
+		{
+			contentLength, ok := r.Headers.Get("content-length")
+			if !ok {
+				r.state = requestStateDone
+				return 0, nil
+			}
+			contentLengthInt, err := strconv.Atoi(contentLength)
+			if err != nil {
+				return 0, fmt.Errorf("Could not convert content-length to int: %v", err)
+			}
+			r.Body = append(r.Body, data...)
+			if len(r.Body) > contentLengthInt {
+				return 0, fmt.Errorf("content-length is smaller than data length: content-length=%d len(data)=%d", contentLengthInt, len(data))
+			} else if len(r.Body) < contentLengthInt {
+				return len(data), nil
+			}
+
+			r.state = requestStateDone
+
+			return len(data), nil
+
 		}
 	case requestStateDone:
 		{

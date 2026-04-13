@@ -37,6 +37,12 @@ func isSpecialTchar(c byte) bool {
 	return strings.IndexByte(specials, c) >= 0
 }
 
+func (h Headers) Get(key string) (value string, ok bool) {
+	lower_key :=  strings.ToLower(key)
+	value, ok = h[lower_key]
+	return value, ok
+}
+
 func (h Headers) UseParse(data []byte) (n int, done bool, err error) {
 
 	n = 0
