@@ -108,20 +108,21 @@ func (r *Request) parse(data []byte) (int, error) {
 
 			return bytesConsumed, nil
 		}
-	case requestStateParsingHeaders: {
-		bytesConsumed, done, err := r.Headers.UseParse(data)
-		if err != nil {
-			return 0, err
-		}
+	case requestStateParsingHeaders:
+		{
+			bytesConsumed, done, err := r.Headers.UseParse(data)
+			if err != nil {
+				return 0, err
+			}
 
-		if !done {
+			if !done {
+				return bytesConsumed, nil
+			}
+
+			r.state = requestStateDone
+
 			return bytesConsumed, nil
 		}
-
-		r.state = requestStateDone
-
-		return bytesConsumed, nil
-	}
 	case requestStateDone:
 		{
 			return 0, fmt.Errorf("[ERROR] Trying to read data in  a requestStateDone state")
