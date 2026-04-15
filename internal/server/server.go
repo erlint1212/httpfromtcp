@@ -26,6 +26,13 @@ func newServer() *Server {
 	return &Server{}
 }
 
+func (s *Server) GetAddr() net.Addr {
+    if s.listner == nil {
+        return nil
+    }
+    return s.listner.Addr()
+}
+
 func Serve(port int) (srv *Server, err error) {
 	srvListner, err := net.Listen(network, ":"+strconv.Itoa(port))
 	if err != nil {
