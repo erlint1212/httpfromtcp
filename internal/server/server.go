@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"httpfromtcp/internal/response"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -76,14 +77,16 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	const response = "HTTP/1.1 200 OK\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"\r\n" +
-		"Hello World!\r\n"
 	
-	_, err := conn.Write([]byte(response))
+	err := response.WriteStatusLine(conn, response.StatusCodeOK)
 	if err != nil {
-		fmt.Printf("[ERROR] failed to write to conn: %v\n", err)
+		fmt.Printf("[ERROR] failed to write status line to conn: %v\n", err)
+	}
+
+	statusLine := response.GetDefaultHeaders(0)
+	err = response.WriteHeaders(conn, statusLine)
+	if err != nil {
+		fmt.Printf("[ERROR] failed to write headers line to conn: %v\n", err)
 	}
 
 	fmt.Println("Response sent to:", conn.RemoteAddr())
