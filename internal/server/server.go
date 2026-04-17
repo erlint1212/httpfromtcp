@@ -34,7 +34,7 @@ func (s *Server) GetAddr() net.Addr {
     return s.listner.Addr()
 }
 
-func Serve(port int) (srv *Server, err error) {
+func Serve(port int, handler Handler) (srv *Server, err error) {
 	srvListner, err := net.Listen(network, ":"+strconv.Itoa(port))
 	if err != nil {
 		return nil, fmt.Errorf("failed to start listen to connection: %v", err)
