@@ -17,5 +17,4 @@ func WriteHandlerError(w io.Writer, handlerError *HandlerError) error {
 	statusLine := fmt.Sprintf("HTTP/1.1 %d %s", handlerError.StatusCode, handlerError.Message)
 	_, err := w.Write([]byte(statusLine))
 	return err
-	
 }

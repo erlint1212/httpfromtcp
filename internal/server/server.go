@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"net"
 	"strconv"
@@ -43,7 +45,7 @@ func Serve(port int, handler Handler) (srv *Server, err error) {
 	srv.listner = srvListner
 	srv.state = serverStateRunning
 
-	go srv.listen()
+	go srv.listen(handler)
 
 	return srv, nil
 }
@@ -60,7 +62,7 @@ func (s *Server) Close() (err error) {
 	return nil
 }
 
-func (s *Server) listen() {
+func (s *Server) listen(handler Handler) {
 	for s.state != serverStateShutdown {
 		conn, err := s.listner.Accept()
 		if err != nil {
@@ -71,22 +73,38 @@ func (s *Server) listen() {
 			fmt.Printf("[ERROR] error while listening: %v\n", err)
 			continue
 		}
-		go s.handle(conn)
+		go s.handle(conn, handler)
 	}
 }
 
-func (s *Server) handle(conn net.Conn) {
+func (s *Server) handle(conn net.Conn, handler Handler) {
 	defer conn.Close()
-	
-	err := response.WriteStatusLine(conn, response.StatusCodeOK)
+
+	req, err := request.RequestFromReader(conn)
+	if err != nil {
+		fmt.Printf("[ERROR] failed to parse request from connection: %v\n", err)
+		return
+	}
+
+	var buffer bytes.Buffer
+	handlerErr := handler(&buffer, req)
+	err = WriteHandlerError(&buffer, handlerErr)
+	if err != nil {
+		fmt.Printf("[ERROR] failed to write error to writer: %v\n", err)
+		return
+	}
+
+	err = response.WriteStatusLine(conn, response.StatusCodeOK)
 	if err != nil {
 		fmt.Printf("[ERROR] failed to write status line to conn: %v\n", err)
+		return
 	}
 
 	statusLine := response.GetDefaultHeaders(0)
 	err = response.WriteHeaders(conn, statusLine)
 	if err != nil {
 		fmt.Printf("[ERROR] failed to write headers line to conn: %v\n", err)
+		return
 	}
 
 	fmt.Println("Response sent to:", conn.RemoteAddr())
