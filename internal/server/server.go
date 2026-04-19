@@ -87,6 +87,8 @@ func (s *Server) handle(conn net.Conn, handler Handler) {
 	}
 
 	var buffer bytes.Buffer
+	defer buffer.WriteTo(conn)
+
 	handlerErr := handler(&buffer, req)
 	err = WriteHandlerError(&buffer, handlerErr)
 	if err != nil {
@@ -94,14 +96,14 @@ func (s *Server) handle(conn net.Conn, handler Handler) {
 		return
 	}
 
-	err = response.WriteStatusLine(conn, response.StatusCodeOK)
+	err = response.WriteStatusLine(&buffer, handlerErr.StatusCode)
 	if err != nil {
 		fmt.Printf("[ERROR] failed to write status line to conn: %v\n", err)
 		return
 	}
 
-	statusLine := response.GetDefaultHeaders(0)
-	err = response.WriteHeaders(conn, statusLine)
+	statusLine := response.GetDefaultHeaders(buffer.Len())
+	err = response.WriteHeaders(&buffer, statusLine)
 	if err != nil {
 		fmt.Printf("[ERROR] failed to write headers line to conn: %v\n", err)
 		return
