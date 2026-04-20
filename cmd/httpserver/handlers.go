@@ -5,7 +5,21 @@ import (
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
 	"io"
+	"fmt"
 )
+
+func handlerSwitch(w io.Writer, req *request.Request) *server.HandlerError {
+	fmt.Println("parsed request!", req.RequestLine.RequestTarget)
+	switch req.RequestLine.RequestTarget {
+	case "/yourproblem":
+		return handleYourProblem(w, req)
+	case "/myproblem":
+		return handleMyProblem(w, req)
+	default:
+		return handleDefault(w, req)
+	}
+
+}
 
 func handleYourProblem(w io.Writer, req *request.Request) *server.HandlerError {
 	handlerError := server.HandlerError{
@@ -19,18 +33,14 @@ func handleYourProblem(w io.Writer, req *request.Request) *server.HandlerError {
 func handleMyProblem(w io.Writer, req *request.Request) *server.HandlerError {
 	handlerError := server.HandlerError{
 		StatusCode: response.StatusCodeInternalServerError,
-		Message: "Your problem is not my problem\n",
+		Message: "Woopsie, my bad\n",
 
 	}
 	return &handlerError
 }
 
 func handleDefault(w io.Writer, req *request.Request) *server.HandlerError {
-	handlerError := server.HandlerError{
-		StatusCode: response.StatusCodeOK,
-		Message: "All good, frfr\n",
-
-	}
-	return &handlerError
+	w.Write([]byte("All good, frfr\n"))
+	return nil
 }
 

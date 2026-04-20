@@ -1,10 +1,7 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
-	"httpfromtcp/internal/request"
-	"httpfromtcp/internal/response"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -20,8 +17,8 @@ const (
 const network = "tcp"
 
 type Server struct {
-	listner net.Listener
-	state   ServerState
+	listner  net.Listener
+	state    ServerState
 	isClosed atomic.Bool
 }
 
@@ -30,10 +27,10 @@ func newServer() *Server {
 }
 
 func (s *Server) GetAddr() net.Addr {
-    if s.listner == nil {
-        return nil
-    }
-    return s.listner.Addr()
+	if s.listner == nil {
+		return nil
+	}
+	return s.listner.Addr()
 }
 
 func Serve(port int, handler Handler) (srv *Server, err error) {
@@ -77,37 +74,3 @@ func (s *Server) listen(handler Handler) {
 	}
 }
 
-func (s *Server) handle(conn net.Conn, handler Handler) {
-	defer conn.Close()
-
-	req, err := request.RequestFromReader(conn)
-	if err != nil {
-		fmt.Printf("[ERROR] failed to parse request from connection: %v\n", err)
-		return
-	}
-
-	var buffer bytes.Buffer
-	defer buffer.WriteTo(conn)
-
-	handlerErr := handler(&buffer, req)
-	err = WriteHandlerError(&buffer, handlerErr)
-	if err != nil {
-		fmt.Printf("[ERROR] failed to write error to writer: %v\n", err)
-		return
-	}
-
-	err = response.WriteStatusLine(&buffer, handlerErr.StatusCode)
-	if err != nil {
-		fmt.Printf("[ERROR] failed to write status line to conn: %v\n", err)
-		return
-	}
-
-	statusLine := response.GetDefaultHeaders(buffer.Len())
-	err = response.WriteHeaders(&buffer, statusLine)
-	if err != nil {
-		fmt.Printf("[ERROR] failed to write headers line to conn: %v\n", err)
-		return
-	}
-
-	fmt.Println("Response sent to:", conn.RemoteAddr())
-}

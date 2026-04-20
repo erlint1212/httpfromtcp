@@ -126,7 +126,11 @@ func (r *Request) parse(data []byte) (int, error) {
 				return bytesConsumed, nil
 			}
 
-			r.state = requestStateParsingBody
+			if _, ok := r.Headers.Get("content-length"); !ok {
+				r.state = requestStateDone
+			} else {
+				r.state = requestStateParsingBody
+			}
 
 			return bytesConsumed, nil
 		}

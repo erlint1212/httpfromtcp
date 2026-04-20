@@ -79,7 +79,6 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 
 	header := dataStringSplit[0]
-	fmt.Println(header)
 
 	if header == "" {
 		return len(CRLF), true, nil
