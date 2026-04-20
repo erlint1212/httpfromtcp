@@ -16,7 +16,51 @@ const (
 	StatusCodeInternalServerError StatusCode = 500
 )
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+type WriterState int
+
+const (
+	WriteStateLine WriterState = iota
+	WriteStateHeaders
+	WriteStateBody
+)
+
+type Writer struct {
+	w     io.Writer
+	StatusLine []byte
+	state WriterState
+}
+
+func NewWriter(conn io.Writer) *Writer {
+	newWriter := &Writer{
+		w: conn,
+		state: WriteStateLine,
+	}
+	return newWriter
+}
+
+func (w *Writer) htmlification(msg string) ([]byte, error) {
+	if w.state != WriteStateBody {
+		return []byte{}, fmt.Errorf("expected Writer state to be in %v, got %v", WriteStateBody, w.state)
+	}
+	html_struct := `
+	<html>
+	  <head>
+		<title>%s</title>
+	  </head>
+	  <body>
+		<h1>%s</h1>
+		<p>%s</p>
+	  </body>
+	</html>`
+	statusMessage := strings.ReplaceAll(string(w.StatusLine), "\r\n", "")
+	statusMessageList := strings.Split(statusMessage, " ")
+	return []byte(fmt.Sprintf(html_struct, statusMessageList[1:], statusMessageList[2:], msg)), nil
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.state != WriteStateLine {
+		return fmt.Errorf("expected Writer state to be in %v, got %v", WriteStateLine, w.state)
+	}
 	statusLine := ""
 
 	switch statusCode {
@@ -40,10 +84,7 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 
 	}
 
-	_, err := w.Write([]byte(statusLine))
-	if err != nil {
-		return err
-	}
+	w.w.Write([]byte(statusLine))
 	return nil
 
 }
@@ -52,15 +93,19 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	header := headers.NewHeaders()
 	header["Content-Length"] = strconv.Itoa(contentLen)
 	header["Connection"] = "close"
-	header["Content-Type"] = "text/plain"
+	header["Content-Type"] = "text/html"
 
 	return header
 
 }
 
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.state != WriteStateLine {
+		return fmt.Errorf("expected Writer state to be in %v, got %v", WriteStateLine, w.state)
+	}
+	w.state = WriteStateHeaders
 	if len(headers) == 0 {
-		w.Write([]byte("\r\n"))
+		w.w.Write([]byte("\r\n"))
 		return nil
 	}
 	var builder strings.Builder
@@ -70,7 +115,16 @@ func WriteHeaders(w io.Writer, headers headers.Headers) error {
 	fmt.Fprintf(&builder, "\r\n")
 
 	headers_string := builder.String()
-	_, err := w.Write([]byte(headers_string))
+	w.w.Write([]byte(headers_string))
 
-	return err
+	return nil
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.state != WriteStateHeaders {
+		return 0, fmt.Errorf("expected Writer state to be in %v, got %v", WriteStateHeaders, w.state)
+	}
+	w.state = WriteStateBody
+	w.w.Write(p)
+	return len(p), nil
 }
