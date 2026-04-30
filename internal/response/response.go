@@ -1,6 +1,7 @@
 package response
 
 import (
+	"encoding/hex"
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
@@ -36,6 +37,42 @@ func NewWriter(conn io.Writer) *Writer {
 		state: WriteStateLine,
 	}
 	return newWriter
+}
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	length := len(p)
+	hexSize := fmt.Sprintf("%x\r\n", length)
+
+	var totalWritten int
+
+	n, err := w.WriteBody([]byte(hexSize))
+	totalWritten += n
+	if err != nil {
+		return totalWritten, err
+	}
+
+	n, err = w.WriteBody(p)
+	totalWritten += n
+	if err != nil {
+		return totalWritten, err
+	}
+
+	n, err = w.WriteBody([]byte("\r\n"))
+	totalWritten += n
+	if err != nil {
+		return totalWritten, err
+	}
+
+	return totalWritten, nil
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	n, err := w.WriteBody([]byte("0\r\n\r\n"))
+	if err != nil {
+		return n, err
+	}
+
+	return n, nil
 }
 
 func (w *Writer) htmlification(msg string) ([]byte, error) {
