@@ -1,7 +1,6 @@
 package response
 
 import (
-	"encoding/hex"
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
@@ -26,14 +25,14 @@ const (
 )
 
 type Writer struct {
-	w     io.Writer
+	w          io.Writer
 	StatusLine []byte
-	state WriterState
+	state      WriterState
 }
 
 func NewWriter(conn io.Writer) *Writer {
 	newWriter := &Writer{
-		w: conn,
+		w:     conn,
 		state: WriteStateLine,
 	}
 	return newWriter
@@ -154,11 +153,13 @@ func (w *Writer) WriteHeaders(headers headers.Headers) error {
 	headers_string := builder.String()
 	w.w.Write([]byte(headers_string))
 
+	w.state = WriteStateBody
+
 	return nil
 }
 
 func (w *Writer) WriteBody(p []byte) (int, error) {
-	if w.state != WriteStateHeaders {
+	if w.state != WriteStateBody {
 		return 0, fmt.Errorf("expected Writer state to be in %v, got %v", WriteStateHeaders, w.state)
 	}
 	w.state = WriteStateBody

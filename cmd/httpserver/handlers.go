@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"io"
@@ -37,46 +37,64 @@ func handlerSwitch(w *response.Writer, req *request.Request) {
 }
 
 func handleHttpBin(w *response.Writer, req *request.Request) {
-	err := w.WriteStatusLine(response.StatusCodeOK)
-	if err != nil {
-		fmt.Println("[ERROR] failed to write status line: %v", err)
-		return
-	}
-
 	rest := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
 
 	resp, err := http.Get(fmt.Sprintf("https://httpbin.org/%s", rest))
 	if err != nil {
-		fmt.Println("[ERROR] failed to GET response from \"https://httpbin.org/x\": ", err)
+		fmt.Printf("[ERROR] failed to GET response from \"https://httpbin.org/%s\": %v\n", rest, err)
 		return
 	}
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			fmt.Println("[ERROR] failed to close response body: ", err)
+		}
+	}()
 
-	body := make([]byte, 1024)
-
-	// body, err := io.ReadAll(resp.Body)
-	_, err = resp.Body.Read(body)
+	err = w.WriteStatusLine(response.StatusCode(resp.StatusCode))
 	if err != nil {
-		fmt.Println("[ERROR] failed to READ response: ", err)
+		fmt.Println("[ERROR] failed to write status line: ", err)
 		return
 	}
 
-	header := response.GetDefaultHeaders(len(body))
+	header := headers.NewHeaders()
+
+	header["Transfer-Encoding"] = "chunked"
+
 	err = w.WriteHeaders(header)
 	if err != nil {
 		fmt.Println("[ERROR] failed to write headers: ", err)
 		return
 	}
-	_, err = w.WriteChunkedBody(body)
-	if err != nil {
-		fmt.Println("[ERROR] failed to write body ", err)
-		return
-	}
-	_, err = w.WriteChunkedBodyDone()
-	if err != nil {
-		fmt.Println("[ERROR] failed to write body ", err)
-		return
+
+	body := make([]byte, 1024)
+	totalWritten := 0
+
+	for {
+		bytesRead, err := resp.Body.Read(body)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Println("[ERROR] failed to READ response: ", err)
+			return
+		}
+
+		bytesWritten, err := w.WriteChunkedBody(body[:bytesRead])
+		if err != nil {
+			fmt.Println("[ERROR] failed to write body ", err)
+			return
+		}
+		totalWritten += bytesWritten
+
 	}
 
+	n, err := w.WriteChunkedBodyDone()
+	if err != nil {
+		fmt.Println("[ERROR] failed to write body ", err)
+		return
+	}
+	totalWritten += n
 
 }
 
@@ -113,7 +131,7 @@ func handleYourProblem(w *response.Writer, req *request.Request) {
 func handleMyProblem(w *response.Writer, req *request.Request) {
 	err := w.WriteStatusLine(response.StatusCodeInternalServerError)
 	if err != nil {
-		fmt.Println("[ERROR] failed to write status line: %v", err)
+		fmt.Println("[ERROR] failed to write status line: ", err)
 		return
 	}
 
@@ -142,7 +160,7 @@ func handleMyProblem(w *response.Writer, req *request.Request) {
 func handleDefault(w *response.Writer, req *request.Request) {
 	err := w.WriteStatusLine(response.StatusCodeOK)
 	if err != nil {
-		fmt.Println("[ERROR] failed to write status line: %v", err)
+		fmt.Println("[ERROR] failed to write status line: ", err)
 		return
 	}
 
