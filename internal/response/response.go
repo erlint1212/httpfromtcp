@@ -21,6 +21,7 @@ type WriterState int
 const (
 	WriteStateLine WriterState = iota
 	WriteStateHeaders
+	WriteStateTrailer
 	WriteStateBody
 )
 
@@ -36,6 +37,34 @@ func NewWriter(conn io.Writer) *Writer {
 		state: WriteStateLine,
 	}
 	return newWriter
+}
+
+func (w *Writer) WriteTrailers(headers headers.Headers) error {
+	if w.state != WriteStateBody {
+		return fmt.Errorf("expected Writer state to be in %v, got %v", WriteStateBody, w.state)
+	}
+	w.state = WriteStateTrailer
+	if len(headers) == 0 {
+		_, err := w.w.Write([]byte("\r\n"))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	var builder strings.Builder
+	for k, v := range headers {
+		fmt.Fprintf(&builder, "%s: %s\r\n", k, v)
+	}
+	fmt.Fprintf(&builder, "\r\n")
+
+	headers_string := builder.String()
+	_, err := w.w.Write([]byte(headers_string))
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 func (w *Writer) WriteChunkedBody(p []byte) (int, error) {

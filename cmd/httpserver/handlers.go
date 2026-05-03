@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"httpfromtcp/internal/request"
@@ -15,6 +17,10 @@ func handlerSwitch(w *response.Writer, req *request.Request) {
 
 	target := req.RequestLine.RequestTarget
 	if strings.HasPrefix(target, "/httpbin/") {
+		if strings.HasPrefix(target, "/httpbin/html") {
+			handleTrailerHttpBin(w, req)
+			return
+		}
 		handleHttpBin(w, req)
 		return
 	}
@@ -31,6 +37,83 @@ func handlerSwitch(w *response.Writer, req *request.Request) {
 		return
 	default:
 		handleDefault(w, req)
+		return
+	}
+
+}
+
+func handleTrailerHttpBin(w *response.Writer, req *request.Request) {
+	resp, err := http.Get("https://httpbin.org/html")
+	if err != nil {
+		fmt.Printf("[ERROR] failed to GET response from \"https://httpbin.org/html\": %v\n", err)
+		return
+	}
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			fmt.Println("[ERROR] failed to close response body: ", err)
+		}
+	}()
+
+	err = w.WriteStatusLine(response.StatusCode(resp.StatusCode))
+	if err != nil {
+		fmt.Println("[ERROR] failed to write status line: ", err)
+		return
+	}
+
+	header := headers.NewHeaders()
+
+	header["Transfer-Encoding"] = "chunked"
+	header["Trailer"] = "X-Content-Sha256, X-Content-Length"
+
+	err = w.WriteHeaders(header)
+	if err != nil {
+		fmt.Println("[ERROR] failed to write headers: ", err)
+		return
+	}
+
+	buffer := make([]byte, 1024)
+	var completeBody []byte
+	totalWritten := 0
+
+	for {
+		bytesRead, err := resp.Body.Read(buffer)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Println("[ERROR] failed to READ response: ", err)
+			return
+		}
+
+		completeBody = append(completeBody, buffer[:bytesRead]...)
+
+		bytesWritten, err := w.WriteChunkedBody(buffer[:bytesRead])
+		if err != nil {
+			fmt.Println("[ERROR] failed to write buffer ", err)
+			return
+		}
+		totalWritten += bytesWritten
+
+	}
+
+	n, err := w.WriteChunkedBodyDone()
+	if err != nil {
+		fmt.Println("[ERROR] failed to write body ", err)
+		return
+	}
+	totalWritten += n
+
+	response_hash := sha256.Sum256(completeBody)
+
+	trailer := headers.NewHeaders()
+
+	trailer["X-Content-SHA256"] = hex.EncodeToString(response_hash[:])
+	trailer["X-Content-Length"] = fmt.Sprintf("%d", len(completeBody))
+
+	err = w.WriteTrailers(trailer)
+	if err != nil {
+		fmt.Println("[ERROR] failed to write trailer: ", err)
 		return
 	}
 
