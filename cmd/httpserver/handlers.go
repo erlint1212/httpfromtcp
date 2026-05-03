@@ -74,7 +74,6 @@ func handleTrailerHttpBin(w *response.Writer, req *request.Request) {
 
 	buffer := make([]byte, 1024)
 	var completeBody []byte
-	totalWritten := 0
 
 	for {
 		bytesRead, err := resp.Body.Read(buffer)
@@ -88,21 +87,19 @@ func handleTrailerHttpBin(w *response.Writer, req *request.Request) {
 
 		completeBody = append(completeBody, buffer[:bytesRead]...)
 
-		bytesWritten, err := w.WriteChunkedBody(buffer[:bytesRead])
+		_, err = w.WriteChunkedBody(buffer[:bytesRead])
 		if err != nil {
 			fmt.Println("[ERROR] failed to write buffer ", err)
 			return
 		}
-		totalWritten += bytesWritten
 
 	}
 
-	n, err := w.WriteChunkedBodyDone()
+	_, err = w.WriteChunkedBodyDone()
 	if err != nil {
 		fmt.Println("[ERROR] failed to write body ", err)
 		return
 	}
-	totalWritten += n
 
 	response_hash := sha256.Sum256(completeBody)
 
