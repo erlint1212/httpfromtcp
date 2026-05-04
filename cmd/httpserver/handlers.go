@@ -9,6 +9,8 @@ import (
 	"httpfromtcp/internal/response"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -35,8 +37,45 @@ func handlerSwitch(w *response.Writer, req *request.Request) {
 	case "/httpbin":
 		handleHttpBin(w, req)
 		return
+	case "/video":
+		handleGetVideo(w, req)
+		return
 	default:
 		handleDefault(w, req)
+		return
+	}
+
+}
+
+func handleGetVideo(w *response.Writer, req *request.Request) {
+	const videoPath = "./assets/vim.mp4"
+
+	videoFile, err := os.ReadFile(videoPath)
+	if err != nil {
+		fmt.Println("[ERROR] failed to read video file \"", videoPath, "\": ", err)
+		return 
+	}
+
+	err = w.WriteStatusLine(response.StatusCodeOK)
+	if err != nil {
+		fmt.Println("[ERROR] failed to write status line: ", err)
+		return
+	}
+
+	header := headers.NewHeaders()
+
+	header["Content-Type"] = "video/mp4"
+	header["Content-Length"] =  strconv.Itoa(len(videoFile))
+
+	err = w.WriteHeaders(header)
+	if err != nil {
+		fmt.Println("[ERROR] failed to write headers: ", err)
+		return
+	}
+
+	_, err = w.WriteBody(videoFile)
+	if err != nil {
+		fmt.Println("[ERROR] failed to write body: ", err)
 		return
 	}
 
